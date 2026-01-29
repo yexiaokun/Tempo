@@ -1,0 +1,36 @@
+services:
+  backend:
+    build: .
+    container_name: tempo_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://admin:${DB_PASSWORD}@db:5432/tempo_db
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+    depends_on:
+      - db
+    networks:
+      - tempo_net
+  
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: tempo_db
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=tempo_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - tempo_net
+
+volumes:
+  postgres_data:
+
+networks:
+  tempo_net:

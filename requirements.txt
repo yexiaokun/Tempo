@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+sqlmodel              # 也就是 SQLAlchemy 的现代版
+asyncpg               # PG 的异步驱动
+psycopg2-binary       # PG 的同步驱动 (Alembic 需要)
+alembic               # 数据库迁移
+python-dotenv         # 读 .env
+requests
+httpx                 # 异步 HTTP 请求 (查天气用)
+apscheduler           # 定时任务
+langchain             # AI 核心
+langchain-community
+langchain-openai
+tiktoken
