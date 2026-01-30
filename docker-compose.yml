@@ -10,6 +10,10 @@ services:
       - DATABASE_URL=postgresql+asyncpg://admin:${DB_PASSWORD}@db:5432/tempo_db
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - QWEATHER_API_KEY=${QWEATHER_API_KEY}
+      - QWEATHER_API_BASE=${QWEATHER_API_BASE}
+      - QWEATHER_GEO_BASE=${QWEATHER_GEO_BASE}
+      - TZ=Asia/Shanghai
     depends_on:
       - db
     networks:
@@ -22,6 +26,7 @@ services:
       - POSTGRES_USER=admin
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=tempo_db
+      - TZ=Asia/Shanghai
     ports:
       - "5432:5432"
     volumes:
