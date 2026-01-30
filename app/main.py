@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
-from app.core.database import engine
-from sqlmodel import SQLModel
+from app.core.database import engine, async_session
+from sqlmodel import SQLModel, select
 from app.db import models
 from app.routers import tasks
 from app.services.scheduler import start_scheduler
@@ -10,9 +10,27 @@ from app.services.scheduler import start_scheduler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
-        print("正在检查并创建数据表...")
+        print("🚀 [Init] Checking database tables...")
         await conn.run_sync(SQLModel.metadata.create_all)
     
+    #初始化默认用户
+    async with async_session() as session:
+        statement = select(models.User).where(models.User.username == "demo_user")
+        result = await session.exec(statement)
+        user = result.first()
+
+        if not user:
+            print("👤 [Init] Creating default demo user...")
+            default_user = models.User(
+                username="demo_user",
+                email="demo@example.com",
+                hashed_password="fake_hash_secret",
+                default_city="Shanghai"
+            )
+            session.add(default_user)
+            await session.commit()
+        else:
+            print("✅ [Init] Default user already exists.")
     # 启动定时任务
     start_scheduler()
 
