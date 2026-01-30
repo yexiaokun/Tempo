@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from app.core.database import engine, async_session
 from sqlmodel import SQLModel, select
 from app.db import models
-from app.routers import tasks
+from app.routers import tasks, auth
 from app.services.scheduler import start_scheduler
 
 
@@ -40,6 +40,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Tempo AI Backend", lifespan=lifespan)
 
 app.include_router(tasks.router)
+app.include_router(auth.router)
 
 @app.get("/")
 async def root():

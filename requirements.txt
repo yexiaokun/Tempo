@@ -12,3 +12,7 @@ langchain             # AI 核心
 langchain-community
 langchain-openai
 tiktoken
+passlib[bcrypt]
+bcrypt==4.0.1
+python-jose[cryptography]
+python-multipart

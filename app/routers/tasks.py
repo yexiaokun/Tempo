@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.database import get_session
+from app.core.deps import get_current_user
 from app.services.parser import parse_task_command
 from app.services.weather import weather_service
 from app.services.location import location_service
@@ -20,6 +21,7 @@ class CommandRequest(BaseModel):
 async def create_task_from_natural_language(
     request: CommandRequest,
     req: Request,
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
     """
@@ -32,13 +34,7 @@ async def create_task_from_natural_language(
     """
     
     # --- 1. 获取当前用户 (MVP: 查 demo_user) ---
-    user_stmt = select(User).where(User.username == "demo_user")
-    result = await session.exec(user_stmt)
-    current_user = result.first()
-    
-    # 如果这里报错，说明第一步重置数据库没做，或者是 demo_user 没初始化成功
-    if not current_user:
-        raise HTTPException(status_code=500, detail="System Error: Default user not found.")
+    print(f"👤 [Auth] User: {current_user.username} is creating a task.")
 
     # --- 2. 自动定位 (Auto-Location) ---
     # 获取 IP
@@ -90,10 +86,10 @@ async def create_task_from_natural_language(
             
             # 生成建议
             if weather_info and "text" in weather_info:
-                 if "雨" in weather_info['text']:
-                     suggestion = f"🌧️ {final_location}预报有雨，记得带伞！"
-                 else:
-                     suggestion = f"🌤️ {final_location}天气: {weather_info['text']}"
+                if "雨" in weather_info['text']:
+                    suggestion = f"🌧️ {final_location}预报有雨，记得带伞！"
+                else:
+                    suggestion = f"🌤️ {final_location}天气: {weather_info['text']}"
 
     # --- 6. 存入数据库 ---
     new_task = Task(
