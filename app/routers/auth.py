@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select
 from app.core.database import get_session
+from app.core.deps import get_current_user
 from app.db.models import User
 from app.core.security import verity_password, create_access_token, get_password_hash
 from pydantic import BaseModel
@@ -57,3 +58,10 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(),
     access_token = create_access_token(subject=user.username)
     
     return {"access_token": access_token, "token_type": "bearer"}
+
+@router.get("/me", response_model=User)
+async def read_users_me(current_user: User = Depends(get_current_user)):
+    """
+    查看当前登录用户信息
+    """
+    return current_user

@@ -16,7 +16,7 @@ llm = ChatOpenAI(
 # 2. 初始化通用解析器
 parser = PydanticOutputParser(pydantic_object=TaskExtraction)
 
-async def parse_task_command(user_input: str) -> TaskExtraction:
+async def parse_task_command(user_input: str, user_context: str = "") -> TaskExtraction:
     """
     通用版解析逻辑：不依赖 API 的 Function Calling 功能
     """
@@ -28,12 +28,17 @@ async def parse_task_command(user_input: str) -> TaskExtraction:
     prompt = ChatPromptTemplate.from_messages([
         ("system", """
         你是一个智能日程助手。当前时间是: {now_str}。
+        
+        【用户画像/记忆上下文】
+        {user_context}
+        
         请根据用户的输入，提取任务的关键信息。
         
         【重要规则】
         1. 如果是"明天"、"后天"等相对时间，请基于当前时间计算出准确的 ISO 时间 (YYYY-MM-DDTHH:MM:SS)。
         2. 如果用户没有指定具体时间点(只说了'晚上')，请给出一个合理的默认值(如 20:00:00)。
-        3. 必须输出标准的 JSON 格式，不要包含任何 Markdown 标记（如 ```json）。
+        3. 必须输出标准的 JSON 格式，不要包含任何 Markdown 标记。
+        4. 🌟【冲突检测】：如果用户的指令与【用户画像】冲突（例如用户膝盖有伤但想跑步），请智能调整任务内容（例如改为快走），并将优先级设为 High。
         
         {format_instructions}
         """),
@@ -49,10 +54,12 @@ async def parse_task_command(user_input: str) -> TaskExtraction:
         # PydanticOutputParser 会自动尝试修复简单的 JSON 错误
         result = await chain.ainvoke({
             "text": user_input,
-            "now_str": now_str
+            "now_str": now_str,
+            "user_context": user_context if user_context else "暂无特殊背景信息"
         })
         return result
     except Exception as e:
         print(f"AI 解析失败: {e}")
         # 如果解析失败，这里可以返回 None 或者抛出异常让上层处理
         return None
+    

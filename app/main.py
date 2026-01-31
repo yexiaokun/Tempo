@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from app.core.database import engine, async_session
-from sqlmodel import SQLModel, select
+from sqlmodel import SQLModel, select, text
 from app.db import models
 from app.routers import tasks, auth
 from app.services.scheduler import start_scheduler
@@ -11,6 +11,7 @@ from app.services.scheduler import start_scheduler
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         print("🚀 [Init] Checking database tables...")
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(SQLModel.metadata.create_all)
     
     #初始化默认用户

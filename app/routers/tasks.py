@@ -5,10 +5,11 @@ from app.core.deps import get_current_user
 from app.services.parser import parse_task_command
 from app.services.weather import weather_service
 from app.services.location import location_service
-from app.db.models import Task, User
+from app.db.models import Task, User, TaskStatus
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from sqlmodel import select
+from app.services.memory import memory_service
 
 # 定义路由
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
@@ -16,6 +17,9 @@ router = APIRouter(prefix="/tasks", tags=["Tasks"])
 # 定义请求体模型
 class CommandRequest(BaseModel):
     command: str
+
+class MemoryCreate(BaseModel):
+    content: str
 
 @router.post("/create")
 async def create_task_from_natural_language(
@@ -33,7 +37,7 @@ async def create_task_from_natural_language(
     5. 写入数据库
     """
     
-    # --- 1. 获取当前用户 (MVP: 查 demo_user) ---
+    # --- 1. 获取当前用户 ---
     print(f"👤 [Auth] User: {current_user.username} is creating a task.")
 
     # --- 2. 自动定位 (Auto-Location) ---
@@ -47,6 +51,17 @@ async def create_task_from_natural_language(
 
     # 调用服务查城市
     auto_city = await location_service.get_city_from_ip(client_ip)
+
+
+    print(f"🔍 [Memory] Searching relevant memories for: {request.command}")
+    relevant_context = await memory_service.search_relevant_memories(
+        session, current_user.id, request.command
+    )
+    if relevant_context:
+        print(f"🧠 [Memory] Found context: {relevant_context}")
+    
+    print(f"🤖 [Agent] Analyzing with Context...")
+    parsed = await parse_task_command(request.command, user_context=relevant_context)
 
 
     # --- 3. AI 大脑解析 ---
@@ -122,14 +137,66 @@ async def create_task_from_natural_language(
         "suggestion": suggestion
     }
 
-@router.get("/")
+@router.get("/", response_model=List[Task])
 async def list_tasks(
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
     """
-    查看所有任务列表
+    查看【我的】所有任务列表
+    自动过滤别人的任务
     """
-    statement = select(Task).order_by(Task.scheduled_time)
+    statement = select(Task).where(Task.user_id == current_user.id).order_by(Task.scheduled_time)
     result = await session.exec(statement)
     tasks = result.all()
     return tasks
+
+@router.delete("/{task_id}")
+async def delete_task(
+    task_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    删除任务
+    只能删除自己的任务，删别人的会报错
+    """
+    task = await session.get(Task, task_id)
+
+    if not task or task.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Task not found(or you don't have permission)")
+    
+    await session.delete(task)
+    await session.commit()
+    return {"status": "deleted", "id": task_id}
+
+@router.post("/{task_id}/done")
+async def mark_task_one(
+    task_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    将任务标记为完成
+    """
+    task = await session.get(Task, task_id)
+    if not task or task.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    task.status = TaskStatus.DONE
+    session.add(task)
+    await session.commit()
+    return {"status": "success", "message": f"Task '{task.title}' marked as DONE"}
+
+@router.post("/memories")
+async def create_memory(
+    memory_data: MemoryCreate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    告诉 AI 一个关于你的秘密(习惯)
+    例如：“我不吃辣”， “周三晚上要陪女朋友”
+    """
+    await memory_service.add_memory(session, current_user.id, memory_data.content)
+    return {"status": "success", "msg": "Memory stored."}

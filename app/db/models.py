@@ -3,6 +3,7 @@ from sqlalchemy import Column, JSON
 from typing import Optional, Dict, List
 from datetime import datetime
 from enum import Enum
+from pgvector.sqlalchemy import Vector
 
 class TaskStatus(str, Enum):
     TODO = "TODO",
@@ -50,5 +51,17 @@ class User(SQLModel, table=True):
     #没有定位到ip时的兜底城市
     default_city: str = Field(default="Beijing")
 
+    memories: List["UserMemory"] = Relationship(back_populates="user")
     tasks: List["Task"] = Relationship(back_populates="user")
+    created_at: datetime = Field(default_factory=datetime.now)
+
+class UserMemory(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    
+    content: str
+    embedding: List[float] = Field(sa_column=Column(Vector(1536)))
+
+    user_id: int = Field(foreign_key="user.id")
+    user: Optional["User"] = Relationship(back_populates="memories")
+
     created_at: datetime = Field(default_factory=datetime.now)
