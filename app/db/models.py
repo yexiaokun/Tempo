@@ -59,9 +59,16 @@ class UserMemory(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     
     content: str
-    embedding: List[float] = Field(sa_column=Column(Vector(1536)))
+    embedding: List[float] = Field(sa_column=Column(Vector(1024)))
 
     user_id: int = Field(foreign_key="user.id")
     user: Optional["User"] = Relationship(back_populates="memories")
 
     created_at: datetime = Field(default_factory=datetime.now)
+
+class TaskUpdate(SQLModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    scheduled_time: Optional[datetime] = None
+    status: Optional[TaskStatus] = None
+    location_name: Optional[str] = None

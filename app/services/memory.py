@@ -11,19 +11,23 @@ load_dotenv()
 class MemoryService:
     def __init__(self):
         self.client = AsyncOpenAI(
-            api_key=os.getenv("OPENAI_API_KEY"),
-            base_url=os.getenv("OPENAI_BASE_URL")
+            api_key=os.getenv("EMBEDDING_API_KEY"),
+            base_url=os.getenv("EMBEDDING_BASE_URL")
         )
     
     async def get_embedding(self, text: str) -> List[float]:
         """
         调用 OpenAI 获取文本向量
         """
-        response = await self.client.embeddings.create(
-            input=text,
-            model="text--embedding-3-small"
-        )
-        return response.data[0].embedding
+        try:
+            response = await self.client.embeddings.create(
+                input=text,
+                model="BAAI/bge-m3"
+            )
+            return response.data[0].embedding
+        except Exception as e:
+            print(f"❌ [Embedding Error] {e}")
+            raise e
     
     async def add_memory(self, session: AsyncSession, user_id: int, content: str):
         """

@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tempo AI 助手</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2563eb">
+    <link rel="apple-touch-icon" href="https://api.dicebear.com/7.x/notionists/svg?seed=Tempo">
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .page-enter-active, .page-leave-active { transition: all 0.3s ease; }
+        .page-enter-from { opacity: 0; transform: translateX(20px); }
+        .page-leave-to { opacity: 0; transform: translateX(-20px); }
+        .slide-enter-active, .slide-leave-active { transition: transform 0.3s ease; }
+        .slide-enter-from, .slide-leave-to { transform: translateX(100%); }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+            20%, 40%, 60%, 80% { transform: translateX(4px); }
+        }
+        .animate-shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+    </style>
+</head>
+<body class="bg-gray-100 h-screen overflow-hidden text-gray-800 font-sans select-none">
+
+<div id="app" class="h-full max-w-md mx-auto bg-white shadow-2xl relative flex flex-col overflow-hidden">
+
+    <div v-if="!token" class="flex-1 flex flex-col justify-center px-8 bg-blue-50 z-50">
+        <div class="text-center mb-10">
+            <div class="w-24 h-24 bg-blue-600 rounded-3xl mx-auto flex items-center justify-center shadow-xl mb-6 transform hover:rotate-6 transition">
+                <i class="fa-solid fa-bolt text-5xl text-white"></i>
+            </div>
+            <h1 class="text-3xl font-black text-gray-800 tracking-tight">Tempo</h1>
+            <p class="text-gray-500 mt-2 font-medium">懂你的智能日程管家</p>
+        </div>
+        <div class="space-y-4">
+            <div class="flex justify-center space-x-8 mb-4">
+                <button @click="isRegisterMode = false" :class="!isRegisterMode ? 'text-blue-600 border-b-2 border-blue-600 font-bold' : 'text-gray-400'" class="pb-1 transition">登录</button>
+                <button @click="isRegisterMode = true" :class="isRegisterMode ? 'text-blue-600 border-b-2 border-blue-600 font-bold' : 'text-gray-400'" class="pb-1 transition">注册</button>
+            </div>
+
+            <input type="text" v-model="loginForm.username" placeholder="用户名" class="w-full p-4 border-none shadow-sm rounded-2xl focus:ring-2 focus:ring-blue-400 outline-none">
+            
+            <input v-if="isRegisterMode" type="email" v-model="loginForm.email" placeholder="邮箱 (用于找回密码)" class="w-full p-4 border-none shadow-sm rounded-2xl focus:ring-2 focus:ring-blue-400 outline-none">
+
+            <input type="password" v-model="loginForm.password" placeholder="密码" @keyup.enter="isRegisterMode ? register() : login()" class="w-full p-4 border-none shadow-sm rounded-2xl focus:ring-2 focus:ring-blue-400 outline-none">
+            
+            <button v-if="!isRegisterMode" @click="login" class="w-full bg-blue-600 text-white p-4 rounded-2xl font-bold shadow-lg hover:bg-blue-700 active:scale-95 transition">
+                立即开启
+            </button>
+            <button v-else @click="register" class="w-full bg-black text-white p-4 rounded-2xl font-bold shadow-lg hover:bg-gray-800 active:scale-95 transition">
+                注册新账号
+            </button>
+        </div>
+    </div>
+
+    <div v-else class="flex flex-col h-full relative overflow-hidden">
+        
+        <div class="flex-1 overflow-hidden relative">
+            
+            <div v-if="activeTab === 'tasks'" class="h-full flex flex-col bg-gray-50">
+                <div class="px-5 pt-12 pb-3 bg-white z-10 sticky top-0 border-b border-gray-100">
+                    <div class="flex justify-between items-end mb-4">
+                        <div>
+                            <p class="text-gray-400 text-xs uppercase font-bold tracking-wider">{{ currentDateStr }}</p>
+                            <h2 class="text-2xl font-black text-gray-900">我的日程</h2>
+                        </div>
+                        <div class="flex gap-2">
+                             <button v-if="notificationPermission !== 'granted'" @click="requestPermission" class="w-8 h-8 rounded-full bg-yellow-100 text-yellow-600 flex items-center justify-center animate-pulse">
+                                <i class="fa-solid fa-bell"></i>
+                            </button>
+                            <button @click="fetchTasks" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 active:rotate-180 transition duration-500">
+                                <i class="fa-solid fa-rotate-right text-gray-500 text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex space-x-2 overflow-x-auto no-scrollbar">
+                        <button v-for="filter in dateFilters" :key="filter.value"
+                            @click="currentFilter = filter.value"
+                            :class="currentFilter === filter.value ? 'bg-black text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'"
+                            class="px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all">
+                            {{ filter.label }}
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex-1 overflow-y-auto px-5 pb-40 space-y-6 pt-4">
+                    
+                    <div v-if="overdueTasks.length > 0" class="animate-fade">
+                        <div class="flex items-center mb-2 px-1">
+                            <i class="fa-solid fa-triangle-exclamation text-red-500 mr-2 text-xs"></i>
+                            <h3 class="text-xs font-bold text-red-500 uppercase tracking-wider">已超时 · {{ overdueTasks.length }}</h3>
+                        </div>
+                        <div class="space-y-3">
+                            <div v-for="task in overdueTasks" :key="task.id" class="bg-red-50 p-4 rounded-2xl border border-red-100 shadow-sm relative group">
+                                <div class="flex items-start">
+                                    <button @click.stop="toggleStatus(task)" class="mt-1 w-6 h-6 rounded-full border-2 border-red-200 bg-white hover:bg-red-100 flex items-center justify-center mr-3 transition-colors shrink-0">
+                                        <i class="fa-solid fa-check text-red-300 opacity-0 group-hover:opacity-100"></i>
+                                    </button>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="flex justify-between items-start">
+                                            <h4 class="font-bold text-red-900 leading-tight">{{ task.title }}</h4>
+                                            <span class="text-[10px] font-bold px-2 py-1 rounded bg-red-100 text-red-600 ml-2 whitespace-nowrap">
+                                                {{ formatDateTime(task.scheduled_time) }}
+                                            </span>
+                                        </div>
+                                        <p class="text-xs text-red-400 mt-1">⚠️ 该任务已过期</p>
+                                        <div class="mt-2 text-xs text-red-300 flex items-center justify-between">
+                                            <span class="flex items-center truncate max-w-[150px]"><i class="fa-solid fa-location-dot mr-1"></i> {{ task.location_name || '未知' }}</span>
+                                            <div class="flex space-x-3">
+                                                <button @click="openEditTask(task)" class="text-red-300 hover:text-blue-500 p-1"><i class="fa-solid fa-pen"></i></button>
+                                                <button @click="deleteTask(task.id)" class="text-red-300 hover:text-red-600 p-1"><i class="fa-regular fa-trash-can"></i></button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-if="futureTasks.length > 0" class="space-y-3">
+                        <div v-if="overdueTasks.length > 0" class="flex items-center mb-1 px-1 mt-4">
+                            <i class="fa-solid fa-calendar-day text-gray-400 mr-2 text-xs"></i>
+                            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">接下来</h3>
+                        </div>
+
+                        <div v-for="task in futureTasks" :key="task.id" class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative group">
+                            <div class="flex items-start">
+                                <button @click.stop="toggleStatus(task)" class="mt-1 w-6 h-6 rounded-full border-2 border-gray-300 hover:border-blue-500 hover:bg-blue-50 flex items-center justify-center mr-3 transition-colors shrink-0 group/btn">
+                                    <i class="fa-solid fa-check text-blue-500 text-xs opacity-0 group-hover/btn:opacity-100 transition-opacity"></i>
+                                </button>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex justify-between items-start">
+                                        <h4 class="font-bold text-gray-800 leading-tight">{{ task.title }}</h4>
+                                        <span class="text-[10px] font-bold px-2 py-1 rounded bg-gray-100 text-gray-500 ml-2 whitespace-nowrap">{{ formatDateTime(task.scheduled_time) }}</span>
+                                    </div>
+                                    <p v-if="task.ai_suggestion" class="text-xs text-blue-600 mt-2 bg-blue-50 px-2 py-1.5 rounded-lg inline-block font-medium">
+                                        {{ task.ai_suggestion.split('\n')[0].substring(0, 25) }}...
+                                    </p>
+                                    <div class="mt-2 text-xs text-gray-400 flex items-center justify-between">
+                                        <span class="flex items-center truncate max-w-[150px]"><i class="fa-solid fa-location-dot mr-1"></i> {{ task.location_name || '未知' }}</span>
+                                        <div class="flex space-x-3">
+                                            <button @click="openEditTask(task)" class="text-gray-300 hover:text-blue-500 p-1"><i class="fa-solid fa-pen"></i></button>
+                                            <button @click="deleteTask(task.id)" class="text-gray-300 hover:text-red-500 p-1"><i class="fa-regular fa-trash-can"></i></button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div v-if="futureTasks.length === 0 && overdueTasks.length === 0" class="py-10 text-center opacity-40">
+                        <i class="fa-solid fa-mug-hot text-4xl mb-3 text-gray-300"></i>
+                        <p class="text-sm font-medium">暂无待办</p>
+                    </div>
+
+                    <div v-if="completedTasks.length > 0">
+                        <button @click="showCompleted = !showCompleted" class="w-full flex items-center justify-between text-xs font-bold text-gray-400 mb-3 uppercase hover:text-gray-600">
+                            <span>已完成 · {{ completedTasks.length }}</span>
+                            <i :class="showCompleted ? 'fa-chevron-up' : 'fa-chevron-down'" class="fa-solid"></i>
+                        </button>
+                        <div v-if="showCompleted" class="space-y-2">
+                            <div v-for="task in completedTasks" :key="task.id" class="bg-white/60 p-3 rounded-xl flex items-center border border-gray-100">
+                                <button @click.stop="toggleStatus(task)" class="w-5 h-5 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center mr-3 hover:bg-gray-200 shrink-0">
+                                    <i class="fa-solid fa-check text-blue-600 text-[10px]"></i>
+                                </button>
+                                <span class="line-through text-gray-400 flex-1 text-sm truncate">{{ task.title }}</span>
+                                <button @click="deleteTask(task.id)" class="text-gray-300 hover:text-red-500 ml-2"><i class="fa-solid fa-xmark text-sm"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="absolute bottom-24 left-0 w-full px-4 z-40">
+                    <div class="bg-white/90 backdrop-blur-md p-2 rounded-[2rem] shadow-xl border border-gray-100 flex items-center ring-1 ring-black/5">
+                        <input type="text" v-model="command" @keyup.enter="createTask" placeholder="💡 明天下午3点去游泳..." class="flex-1 ml-4 bg-transparent outline-none text-sm text-gray-800 placeholder-gray-400">
+                        <button @click="createTask" :disabled="loading" class="w-10 h-10 rounded-full bg-black text-white flex items-center justify-center disabled:opacity-50 hover:scale-105 active:scale-95 transition shadow-lg">
+                            <i v-if="loading" class="fa-solid fa-circle-notch fa-spin text-sm"></i>
+                            <i v-else class="fa-solid fa-arrow-up text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div v-else-if="activeTab === 'profile' && profileView === 'home'" class="h-full flex flex-col bg-white animate-fade">
+                <div class="bg-gray-50 px-6 pt-16 pb-8 rounded-b-[3rem] shadow-sm relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-blue-100 rounded-full blur-3xl opacity-50 -mr-10 -mt-10"></div>
+                    <div class="flex items-center relative z-10">
+                        <div class="w-20 h-20 rounded-full border-4 border-white shadow-md bg-white overflow-hidden shrink-0 mr-5">
+                            <img :src="avatarUrl" alt="Avatar" class="w-full h-full object-cover">
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex items-center">
+                                <div v-if="!isEditingName" class="flex items-center">
+                                    <h2 class="text-2xl font-black text-gray-900 mr-2">{{ currentUser.username }}</h2>
+                                    <button @click="startEditName" class="text-gray-400 hover:text-blue-500 text-sm"><i class="fa-solid fa-pen"></i></button>
+                                </div>
+                                <div v-else class="flex items-center">
+                                    <input ref="nameInput" v-model="tempName" @blur="saveName" @keyup.enter="saveName" class="bg-white border border-blue-300 rounded px-2 py-1 text-lg font-bold w-32 outline-none focus:ring-2 focus:ring-blue-200">
+                                </div>
+                            </div>
+                            <p class="text-sm text-gray-500 mt-1">Tempo ID: {{ currentUser.id || '8888' }}</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="px-6 py-8 space-y-4">
+                    <p class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">功能与服务</p>
+                    <button @click="goToMemories" class="w-full flex items-center justify-between p-5 bg-white border border-gray-100 rounded-2xl shadow-sm hover:shadow-md hover:border-purple-100 transition group">
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center mr-4 group-hover:scale-110 transition">
+                                <i class="fa-solid fa-brain text-lg"></i>
+                            </div>
+                            <div class="text-left">
+                                <h3 class="font-bold text-gray-800">记忆画像</h3>
+                                <p class="text-xs text-gray-500">管理 AI 对你的认知偏好</p>
+                            </div>
+                        </div>
+                        <i class="fa-solid fa-angle-right text-gray-300"></i>
+                    </button>
+                </div>
+                <div class="mt-auto px-6 pb-24">
+                    <button @click="logout" class="w-full py-4 text-red-500 font-bold bg-red-50 rounded-2xl hover:bg-red-100 transition">退出登录</button>
+                    <p class="text-center text-xs text-gray-300 mt-4">Version MVP 1.3 (Editor Added)</p>
+                </div>
+            </div>
+
+            <transition name="slide">
+                <div v-if="activeTab === 'profile' && profileView === 'memories'" class="absolute inset-0 bg-white z-50 flex flex-col h-full">
+                    <div class="px-5 pt-12 pb-4 bg-white border-b border-gray-50 flex items-center">
+                        <button @click="goBackProfile" class="w-10 h-10 rounded-full hover:bg-gray-100 flex items-center justify-center -ml-2 transition"><i class="fa-solid fa-arrow-left text-gray-700"></i></button>
+                        <h2 class="text-xl font-black text-gray-900 ml-2">记忆画像</h2>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-6 pb-10 bg-white">
+                        <div class="bg-purple-50 p-5 rounded-2xl border border-purple-100 mb-8">
+                            <div class="flex items-center mb-3">
+                                <i class="fa-solid fa-wand-magic-sparkles text-purple-500 mr-2"></i>
+                                <p class="text-xs font-bold text-purple-600 uppercase tracking-wide">Teach AI</p>
+                            </div>
+                            <textarea v-model="newMemory" rows="2" placeholder="比如：我周三晚上要去健身..." class="w-full bg-white rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-purple-200 mb-3 resize-none"></textarea>
+                            <div class="flex justify-end">
+                                <button @click="addMemory" :disabled="!newMemory" class="bg-purple-600 text-white text-xs px-4 py-2 rounded-lg font-bold disabled:opacity-50 shadow-md hover:bg-purple-700 transition">保存习惯</button>
+                            </div>
+                        </div>
+                        <div class="space-y-3">
+                            <h3 class="text-sm font-bold text-gray-800 mb-2">已生效记忆</h3>
+                            <div v-for="mem in memories" :key="mem.id" class="flex items-start bg-gray-50 p-4 rounded-xl group hover:shadow-md transition border border-transparent hover:border-gray-100">
+                                <div class="mt-1 mr-3 w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center shrink-0"><i class="fa-solid fa-brain text-purple-500 text-xs"></i></div>
+                                <p class="text-sm text-gray-700 leading-relaxed flex-1">{{ mem.content }}</p>
+                                <button @click="deleteMemory(mem.id)" class="ml-2 text-gray-300 hover:text-red-500 transition-colors"><i class="fa-regular fa-trash-can"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </transition>
+        </div>
+
+        <div v-show="profileView === 'home'" class="absolute bottom-0 w-full h-20 bg-white border-t border-gray-100 flex items-start justify-around pt-3 z-40 shadow-[0_-5px_20px_rgba(0,0,0,0.03)]">
+            <button @click="switchTab('tasks')" class="flex flex-col items-center w-20 group">
+                <div class="mb-1 transition duration-300" :class="activeTab === 'tasks' ? '-translate-y-1' : ''"><i class="fa-solid fa-layer-group text-xl" :class="activeTab === 'tasks' ? 'text-blue-600' : 'text-gray-300 group-hover:text-gray-500'"></i></div>
+                <span class="text-[10px] font-bold transition-colors" :class="activeTab === 'tasks' ? 'text-blue-600' : 'text-gray-300'">日程</span>
+            </button>
+            <div class="w-10"></div>
+            <button @click="switchTab('profile')" class="flex flex-col items-center w-20 group">
+                <div class="mb-1 transition duration-300" :class="activeTab === 'profile' ? '-translate-y-1' : ''"><i class="fa-solid fa-user text-xl" :class="activeTab === 'profile' ? 'text-blue-600' : 'text-gray-300 group-hover:text-gray-500'"></i></div>
+                <span class="text-[10px] font-bold transition-colors" :class="activeTab === 'profile' ? 'text-blue-600' : 'text-gray-300'">我的</span>
+            </button>
+        </div>
+
+        <div v-if="reminderModal.show" class="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[80] p-6 animate-fade">
+            <div class="bg-white rounded-3xl w-full shadow-2xl p-6 text-center animate-shake">
+                <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">
+                    <i class="fa-solid fa-bell fa-shake"></i>
+                </div>
+                <h3 class="text-xl font-black text-gray-900 mb-2">{{ reminderModal.title }}</h3>
+                <p class="text-gray-600 mb-6 text-lg">{{ reminderModal.task?.title }}</p>
+                <div class="space-y-3">
+                    <button @click="completeReminder" class="w-full py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 active:scale-95 transition">✅ 现在完成</button>
+                    <button @click="snoozeReminder" class="w-full py-3 bg-gray-100 text-gray-500 rounded-xl font-bold hover:bg-gray-200 transition">💤 知道了</button>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="showEditModal" class="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-[80] sm:p-6 animate-fade">
+            <div class="bg-white rounded-t-3xl sm:rounded-3xl w-full p-6 animate-slide-up">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-xl font-black text-gray-900">编辑任务</h3>
+                    <button @click="showEditModal = false" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <label class="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">任务内容</label>
+                        <input v-model="editForm.title" class="w-full bg-gray-50 p-4 rounded-2xl border-none outline-none focus:ring-2 focus:ring-blue-200 font-bold text-gray-800">
+                    </div>
+                    
+                    <div>
+                        <label class="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">详情 / 备注</label>
+                        <textarea v-model="editForm.content" rows="3" class="w-full bg-gray-50 p-4 rounded-2xl border-none outline-none focus:ring-2 focus:ring-blue-200 text-gray-600 text-sm resize-none" placeholder="这里是任务的详细内容..."></textarea>
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">时间 (北京时间)</label>
+                        <input type="datetime-local" v-model="editForm.scheduled_time" class="w-full bg-gray-50 p-4 rounded-2xl border-none outline-none focus:ring-2 focus:ring-blue-200 text-gray-800">
+                    </div>
+                    <button @click="saveEditTask" class="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg shadow-blue-200 active:scale-95 transition mt-4">
+                        保存修改
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="showModal" class="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-[70] sm:p-6 animate-fade">
+             <div class="bg-white rounded-t-3xl sm:rounded-3xl w-full p-6 animate-slide-up">
+                <div class="flex items-center mb-4 text-orange-500"><i class="fa-solid fa-user-doctor text-xl mr-2"></i><span class="font-bold">Tempo 建议</span></div>
+                <p class="mb-4 bg-gray-50 p-3 rounded text-sm text-gray-700">{{ conflictData.suggestion.split('\n')[0] }}</p>
+                <div class="space-y-2 mb-4">
+                    <button v-for="title in conflictData.suggested_titles" @click="acceptSuggestion(title)" class="w-full p-3 border rounded-xl text-left font-bold text-sm hover:bg-blue-50 hover:text-blue-600 transition">{{ title }}</button>
+                </div>
+                <button @click="closeModal" class="w-full py-3 text-gray-400 text-sm">保持原计划</button>
+             </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+const { createApp } = Vue
+
+createApp({
+    data() {
+        return {
+            apiUrl: 'http://localhost:8000', 
+            token: localStorage.getItem('tempo_token') || '',
+            
+            activeTab: 'tasks', profileView: 'home',
+            loginForm: { username: 'batman', password: 'test_pwd', email: ''},
+            isRegisterMode: false,
+            currentUser: { username: 'Guest', id: '' },
+            isEditingName: false, tempName: '',
+
+            tasks: [], memories: [], command: '', loading: false, showCompleted: false, newMemory: '',
+            showModal: false, conflictData: null, currentTaskId: null,
+            currentFilter: 'all', dateFilters: [{label:'全部',value:'all'},{label:'今天',value:'today'},{label:'明天',value:'tomorrow'},{label:'未来',value:'future'}],
+            
+            // 提醒相关
+            notificationPermission: Notification.permission,
+            notifiedTasks: new Set(),
+            reminderModal: { show: false, task: null, title: '时间到了！' },
+            timer: null,
+            uiTimer: null,
+
+            // ✏️ 编辑功能相关
+            showEditModal: false,
+            editForm: { id: null, title: '', content: '', scheduled_time: '' }
+        }
+    },
+    computed: {
+        currentDateStr() { const d = new Date(); return `${d.getMonth()+1}月${d.getDate()}日`; },
+        avatarUrl() { return `https://api.dicebear.com/7.x/notionists/svg?seed=${this.currentUser.username}&backgroundColor=c0aede,b6e3f4`; },
+        
+        filteredTasks() {
+            let list = this.tasks;
+            if (this.currentFilter !== 'all') {
+                const today = new Date(); today.setHours(0,0,0,0);
+                const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+                list = list.filter(t => {
+                    const tDate = new Date(t.scheduled_time); tDate.setHours(0,0,0,0);
+                    if (this.currentFilter === 'today') return tDate.getTime() === today.getTime();
+                    if (this.currentFilter === 'tomorrow') return tDate.getTime() === tomorrow.getTime();
+                    if (this.currentFilter === 'future') return tDate.getTime() > tomorrow.getTime();
+                    return true;
+                });
+            }
+            return list.sort((a,b) => new Date(a.scheduled_time) - new Date(b.scheduled_time));
+        },
+        
+        overdueTasks() {
+            const now = new Date();
+            return this.filteredTasks.filter(t => {
+                if (t.status === 'DONE') return false;
+                const taskTime = new Date(t.scheduled_time); 
+                return taskTime < now;
+            });
+        },
+
+        futureTasks() {
+            const now = new Date();
+            return this.filteredTasks.filter(t => {
+                if (t.status === 'DONE') return false;
+                const taskTime = new Date(t.scheduled_time);
+                return taskTime >= now;
+            });
+        },
+
+        pendingTasks() { return this.filteredTasks.filter(t => t.status !== 'DONE'); },
+        completedTasks() { return this.filteredTasks.filter(t => t.status === 'DONE'); }
+    },
+    mounted() {
+        if (this.token) {
+            this.currentUser.username = localStorage.getItem('tempo_username') || 'batman';
+            this.fetchTasks().then(() => {
+                this.checkMissedTasks();
+            });
+            this.fetchMemories();
+            
+            this.requestPermission();
+            this.timer = setInterval(this.checkReminders, 10000); 
+            this.uiTimer = setInterval(() => { this.$forceUpdate(); }, 60000);
+        }
+    },
+    beforeUnmount() {
+        if (this.timer) clearInterval(this.timer);
+        if (this.uiTimer) clearInterval(this.uiTimer);
+    },
+    methods: {
+        async api(endpoint, method = 'GET', body = null) {
+            const headers = { 'Authorization': `Bearer ${this.token}` };
+            if (body) headers['Content-Type'] = 'application/json';
+            try {
+                const res = await fetch(`${this.apiUrl}${endpoint}`, { method, headers, body: body ? JSON.stringify(body) : null });
+                if (res.status === 401) { this.logout(); return null; }
+                if (!res.ok) throw new Error('API Error');
+                return await res.json();
+            } catch (e) { return null; }
+        },
+        
+        async login() {
+            const formData = new URLSearchParams();
+            formData.append('username', this.loginForm.username);
+            formData.append('password', this.loginForm.password);
+            try {
+                const res = await fetch(`${this.apiUrl}/auth/login`, { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: formData });
+                if (res.ok) {
+                    const data = await res.json();
+                    this.token = data.access_token;
+                    this.currentUser.username = this.loginForm.username; 
+                    localStorage.setItem('tempo_token', this.token);
+                    localStorage.setItem('tempo_username', this.loginForm.username);
+                    this.fetchTasks();
+                    this.fetchMemories();
+                    
+                    this.requestPermission();
+                    if(!this.timer) this.timer = setInterval(this.checkReminders, 10000);
+                    if(!this.uiTimer) this.uiTimer = setInterval(() => { this.$forceUpdate(); }, 60000);
+                } else { alert('登录失败'); }
+            } catch(e) { alert('网络错误'); }
+        },
+        async register() {
+            if (!this.loginForm.username || !this.loginForm.password) {
+                alert("用户名和密码不能为空");
+                return;
+            }
+            try {
+                const res = await fetch(`${this.apiUrl}/auth/register`, { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({
+                        username: this.loginForm.username,
+                        password: this.loginForm.password,
+                        email: this.loginForm.email || `${this.loginForm.username}@tempo.com`, 
+                        default_city: "Shanghai" 
+                    }) 
+                });
+                if (res.ok) {
+                    alert("🎉 注册成功！请直接登录。");
+                    this.isRegisterMode = false; 
+                } else {
+                    const err = await res.json();
+                    alert(`注册失败: ${err.detail || '用户名可能已存在'}`);
+                }
+            } catch(e) {
+                console.error(e);
+                alert('网络连接错误，无法连接到服务器');
+            }
+        },
+        logout() {
+            this.token = ''; localStorage.removeItem('tempo_token');
+            this.activeTab = 'tasks'; this.profileView = 'home';
+            if(this.timer) clearInterval(this.timer);
+            if(this.uiTimer) clearInterval(this.uiTimer);
+        },
+
+        requestPermission() {
+            if (!("Notification" in window)) return;
+            Notification.requestPermission().then(permission => {
+                this.notificationPermission = permission;
+            });
+        },
+        
+        checkReminders() {
+            const now = new Date();
+            // 🐛 调试日志已开启
+            console.log(`[Timer] 检查时间: ${now.toLocaleTimeString()}`); 
+
+            this.pendingTasks.forEach(task => {
+                const taskTime = new Date(task.scheduled_time); 
+                const diff = taskTime - now;
+
+                if (diff > -600000 && diff < 600000) {
+                     console.log(`任务 [${task.title}] 剩余: ${Math.floor(diff/1000)}秒`);
+                }
+
+                if (diff <= 0 && diff > -300000 && !this.notifiedTasks.has(task.id)) {
+                    console.log('✅ 触发提醒:', task.title);
+                    this.triggerAlert(task);
+                }
+            });
+        },
+
+        checkMissedTasks() {
+            const now = new Date();
+            const lookBackWindow = 3 * 60 * 60 * 1000; 
+
+            const missed = this.pendingTasks.filter(task => {
+                const taskTime = new Date(task.scheduled_time);
+                const diff = taskTime - now;
+                return diff < 0 && diff > -lookBackWindow;
+            });
+
+            if (missed.length > 0) {
+                const latestMissed = missed.sort((a,b) => new Date(b.scheduled_time) - new Date(a.scheduled_time))[0];
+                this.reminderModal.title = missed.length === 1 ? "您有一个任务已过期" : `您错过了 ${missed.length} 个任务`;
+                this.reminderModal.task = latestMissed;
+                this.reminderModal.show = true;
+            }
+        },
+
+        triggerAlert(task) {
+            this.notifiedTasks.add(task.id);
+            const audio = new Audio("data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU");
+            audio.play().catch(e => console.log('Auto-play blocked'));
+
+            if (this.notificationPermission === "granted") {
+                new Notification(`⏰ 时间到了: ${task.title}`, {
+                    body: task.ai_suggestion || '快去完成任务吧', 
+                    icon: "https://api.dicebear.com/7.x/notionists/svg?seed=Tempo",
+                    requireInteraction: true
+                });
+            }
+
+            this.reminderModal.title = "⏰ 时间到了！";
+            this.reminderModal.task = task;
+            this.reminderModal.show = true;
+        },
+
+        async completeReminder() {
+            const task = this.reminderModal.task;
+            if (task) { await this.toggleStatus(task); this.reminderModal.show = false; }
+        },
+        snoozeReminder() { this.reminderModal.show = false; },
+
+        // ✏️ 编辑相关逻辑
+        openEditTask(task) {
+            this.editForm = {
+                id: task.id,
+                title: task.title,
+                content: task.content || '', // 👈 回显 content
+                // datetime-local 需要 "YYYY-MM-DDThh:mm" 格式
+                scheduled_time: task.scheduled_time.slice(0, 16) 
+            };
+            this.showEditModal = true;
+        },
+        async saveEditTask() {
+            if (!this.editForm.title || !this.editForm.scheduled_time) return;
+            
+            // 补全秒数 (YYYY-MM-DDThh:mm -> YYYY-MM-DDThh:mm:00)
+            let finalTime = this.editForm.scheduled_time;
+            if(finalTime.length === 16) finalTime += ':00';
+
+            const res = await this.api(`/tasks/${this.editForm.id}`, 'PATCH', {
+                title: this.editForm.title,
+                content: this.editForm.content, // 👈 发送 content
+                scheduled_time: finalTime
+            });
+
+            if (res) {
+                // 更新本地列表，避免重新请求
+                const index = this.tasks.findIndex(t => t.id === this.editForm.id);
+                if (index !== -1) {
+                    this.tasks[index] = { ...this.tasks[index], ...res };
+                }
+                this.showEditModal = false;
+            } else {
+                alert('保存失败');
+            }
+        },
+
+        switchTab(tab) { this.activeTab = tab; if (tab === 'profile') this.profileView = 'home'; },
+        goToMemories() { this.fetchMemories(); this.profileView = 'memories'; },
+        goBackProfile() { this.profileView = 'home'; },
+        startEditName() { this.tempName = this.currentUser.username; this.isEditingName = true; this.$nextTick(() => this.$refs.nameInput.focus()); },
+        async saveName() {
+            if (!this.tempName.trim()) return;
+            if (this.tempName === this.currentUser.username) {
+                this.isEditingName = false;
+                return;
+            }
+
+            const res = await this.api('/auth/users/me', 'PATCH', { username: this.tempName });
+
+            if (res) { 
+                alert(`✅ 修改成功！\n\n您的用户名已变更为 "${this.tempName}"。\n由于身份信息已更新，请使用新名字重新登录。`);
+                this.logout(); 
+            } else {
+                alert('修改失败，可能是该用户名已被占用，请换一个试试。');
+                this.tempName = this.currentUser.username;
+            }
+            this.isEditingName = false;
+        },
+        async fetchTasks() { const data = await this.api('/tasks/'); if(data) this.tasks = data; },
+        async createTask() {
+            if(!this.command.trim()) return; this.loading = true;
+            const data = await this.api('/tasks/create', 'POST', {command:this.command}); this.loading = false;
+            if(data?.status==='success'){ 
+                this.currentTaskId=data.task_id; 
+                if(data.has_conflict){this.conflictData=data;this.showModal=true;}
+                else{this.command='';this.fetchTasks();}
+            }
+        },
+        async toggleStatus(task) {
+            // ⚠️ 修正：全局统一 DONE
+            const target = task.status==='DONE'?'TODO':'DONE'; 
+            task.status = target;
+            await this.api(`/tasks/${task.id}`, 'PATCH', {status: target});
+        },
+        async deleteTask(id) { if(confirm('删?')) { this.tasks=this.tasks.filter(t=>t.id!==id); await this.api(`/tasks/${id}`, 'DELETE'); } },
+        async acceptSuggestion(title) { await this.api(`/tasks/${this.currentTaskId}`, 'PATCH', {title}); this.closeModal(); },
+        closeModal() { this.showModal=false; this.command=''; this.fetchTasks(); },
+        async fetchMemories() { const data = await this.api('/tasks/memories'); if(data) this.memories=data; },
+        async addMemory() { if(!this.newMemory)return; await this.api('/tasks/memories', 'POST', {content:this.newMemory}); this.newMemory=''; this.fetchMemories(); },
+        async deleteMemory(id) { if(confirm('删?')) await this.api(`/tasks/memories/${id}`, 'DELETE'); this.fetchMemories(); },
+        formatDateTime(iso) { 
+            const d=new Date(iso); return `${d.getMonth()+1}/${d.getDate()} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`; 
+        }
+    }
+}).mount('#app')
+</script>
+</body>
+</html>

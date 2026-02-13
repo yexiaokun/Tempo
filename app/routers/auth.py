@@ -7,6 +7,7 @@ from app.core.deps import get_current_user
 from app.db.models import User
 from app.core.security import verity_password, create_access_token, get_password_hash
 from pydantic import BaseModel
+from typing import Optional
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -64,4 +65,24 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
     """
     查看当前登录用户信息
     """
+    return current_user
+
+class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    #后续需要增加修改头像，密码等功能
+
+
+@router.patch("/users/me")
+async def update_current_user(
+    user_update: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """修改当前用户资料"""
+    if user_update.username:
+        current_user.username = user_update.username
+    
+    session.add(current_user)
+    await session.commit()
+    await session.refresh(current_user)
     return current_user

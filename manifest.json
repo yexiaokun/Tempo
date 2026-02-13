@@ -1,0 +1,21 @@
+{
+  "name": "Tempo",
+  "short_name": "Tempo",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "description": "懂你的智能日程管家",
+  "icons": [
+    {
+      "src": "https://api.dicebear.com/7.x/notionists/svg?seed=Tempo",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "https://api.dicebear.com/7.x/notionists/svg?seed=Tempo",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
